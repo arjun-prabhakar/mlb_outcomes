@@ -21,9 +21,8 @@ def process_link(link, lock):
         if h.strip() == '-->': continue
         uncommented_html += h + '\n'
     soup = bs(uncommented_html)    
+
     game_summary = get_game_summary(soup)
-    
-    
     home_batting, away_batting = get_batting_data(soup)    
     home_pitching, away_pitching = get_pitching_data(soup)    
     home_pitchers, away_pitchers = get_pitcher_data(soup)
@@ -176,7 +175,10 @@ def get_game_summary(soup):
     game['start_time'] = meta[1].text[12:-6].strip()
     game['venue']=meta[3].text[7:].strip()
     game['day_night']=meta[5].text.split(', ')[0].strip()
-    game['field_type']=meta[5].text.split(', ')[1].strip()
+    try:
+        game['field_type']=meta[5].text.split(', ')[1].strip()
+    except:
+        pass
     
     box = soup.find('table',{'class':'linescore'})
     rows = box.findAll('tr')
