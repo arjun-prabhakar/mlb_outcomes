@@ -178,7 +178,7 @@ def get_game_summary(soup):
     try:
         game['field_type']=meta[5].text.split(', ')[1].strip()
     except:
-        pass
+        game['field_type']=''
     
     box = soup.find('table',{'class':'linescore'})
     rows = box.findAll('tr')
