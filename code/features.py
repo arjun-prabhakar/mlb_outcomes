@@ -4,7 +4,7 @@ import numpy as np
 import re
 from scipy.stats import skew
 
-def calc_stat(stat, stat_df, games_df, result_q):
+def calc_stat(stat, stat_df, games_df, result_q, key='team'):
     '''
     calculates season-to-date mean, stdev, skew for given stat from reference dataframe. fills na with 0
     
@@ -14,6 +14,7 @@ def calc_stat(stat, stat_df, games_df, result_q):
     - stat_df: dataframe with end of game stats (like batting or pitching csvs gemerated by scrape.py)
     - games_df: dataframe with games of interest
     - result_q: queue object in which to store results
+    - key: 'team' if building team level stats, otherwise will build pitcher stats
     
     returns:
     --------
@@ -44,15 +45,24 @@ def calc_stat(stat, stat_df, games_df, result_q):
     
     assert df_len == len(games_df)
     
+    if key=='team':
+        #building team level stats
+        a_key = 'away_team_abbr'
+        h_key = 'home_team_abbr'
+    else:
+        #building pitcher stats
+        a_key = 'away_pitcher'
+        h_key = 'home_pitcher'
+    
     stats = {}
-    for t in games_df.home_team_abbr.unique():stats[t]=[]
-    for t in games_df.away_team_abbr.unique():stats[t]=[]
+    for t in games_df[h_key].unique():stats[t]=[]
+    for t in games_df[a_key].unique():stats[t]=[]
     
     for i, r in games_df.iterrows():
         
         #get distributions
-        h = np.array(stats[r.home_team_abbr])
-        a = np.array(stats[r.away_team_abbr])
+        h = np.array(stats[r[h_key]])
+        a = np.array(stats[r[a_key]])
         
         #calc stat  and append to dict
         hmean.append(h.mean())
@@ -65,8 +75,8 @@ def calc_stat(stat, stat_df, games_df, result_q):
         askew.append(skew(a))
         
         #update stats
-        stats[r.home_team_abbr].append(r['home_'+stat])
-        stats[r.away_team_abbr].append(r['away_'+stat])
+        stats[r[h_key]].append(r['home_'+stat])
+        stats[r[a_key]].append(r['away_'+stat])
     diff = np.array(hmean) - np.array(amean)
     
     names = ['home_'+stat+'_mean', 'away_'+stat+'_mean',
@@ -77,11 +87,11 @@ def calc_stat(stat, stat_df, games_df, result_q):
     for i in range(len(names)):
         result_q.put((names[i],lists[i]))
 
-def calc_stat_worker(q,batting,df,result_q):
+def calc_stat_worker(q,batting,df,result_q, key='pitcher'):
     #worker for threaded calc_stat
     while not q.empty():
         stat = q.get()
-        calc_stat(stat,batting,df,result_q)
+        calc_stat(stat,batting,df,result_q, key)
         print(stat,'Done!')
         q.task_done()
 
