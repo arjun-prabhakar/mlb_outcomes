@@ -4,7 +4,7 @@ import numpy as np
 import re
 from scipy.stats import skew
 
-def calc_stat(stat, stat_df, games_df, result_q, key='team'):
+def calc_stat(stat, stat_df, games_df, result_q, key):
     '''
     calculates season-to-date mean, stdev, skew for given stat from reference dataframe. fills na with 0
     
@@ -60,20 +60,16 @@ def calc_stat(stat, stat_df, games_df, result_q, key='team'):
     
     for i, r in games_df.iterrows():
         
-        #get distributions
-        h = np.array(stats[r[h_key]])
-        a = np.array(stats[r[a_key]])
+        m, s, sk = get_stats_from_dist(stats[r[h_key]])
+        hmean.append(m)
+        hstdev.append(s)
+        hskew.append(sk)
         
-        #calc stat  and append to dict
-        hmean.append(h.mean())
-        amean.append(a.mean())
-
-        hstdev.append(h.std())
-        astdev.append(a.std())
-
-        hskew.append(skew(h))
-        askew.append(skew(a))
-        
+        m, s, sk = get_stats_from_dist(stats[r[a_key]])
+        amean.append(m)
+        astdev.append(s)
+        askew.append(sk)
+                
         #update stats
         stats[r[h_key]].append(r['home_'+stat])
         stats[r[a_key]].append(r['away_'+stat])
@@ -87,6 +83,11 @@ def calc_stat(stat, stat_df, games_df, result_q, key='team'):
     for i in range(len(names)):
         result_q.put((names[i],lists[i]))
 
+        
+def get_stats_from_dist(dist):
+    d = np.array(dist).astype('float')
+    return d.mean(),d.std(),skew(d)
+    
 def calc_stat_worker(q,batting,df,result_q, key='pitcher'):
     #worker for threaded calc_stat
     while not q.empty():
