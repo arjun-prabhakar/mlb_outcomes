@@ -2,8 +2,94 @@ import pandas as pd
 import numpy as np
 
 import re
-import queue
-import threading
+from scipy.stats import skew
+
+def calc_stat(stat, stat_df, games_df, result_q):
+    '''
+    calculates season-to-date mean, stdev, skew for given stat from reference dataframe. fills na with 0
+    
+    params:
+    -------
+    - stat: column name in reference df from which to calc stat
+    - stat_df: dataframe with end of game stats (like batting or pitching csvs gemerated by scrape.py)
+    - games_df: dataframe with games of interest
+    - result_q: queue object in which to store results
+    
+    returns:
+    --------
+    results_q gets a tuple
+    - 0: name of created feature, like "batting_avg_mean"
+    - 1: list of values corresponging to games ing games_df
+    add the results back to games_df like this:
+        key, result = result_q.get()
+        df[key]=result
+    '''
+       
+    hmean,amean = [],[]
+    hstdev,astdev = [],[]
+    hskew,askew = [],[]
+    
+    df_len = len(games_df)
+    # merge in home team stat to df
+    b = stat_df[['game_id',stat]][stat_df['is_home_team']==True].groupby('game_id').first().reset_index()
+    games_df = pd.merge(left=games_df, right=b,on='game_id', how='left')
+    games_df['home_'+stat] = games_df[stat]
+    games_df.drop(columns=stat, inplace=True)
+    
+    #now moerge in away team stat
+    b = stat_df[['game_id',stat]][stat_df['is_home_team']==False].groupby('game_id').first().reset_index()
+    games_df = pd.merge(left=games_df, right=b, on='game_id', how='left')
+    games_df['away_'+stat] = games_df[stat]
+    games_df.drop(columns=stat, inplace=True)
+    
+    assert df_len == len(games_df)
+    
+    stats = {}
+    for t in games_df.home_team_abbr.unique():stats[t]=[]
+    for t in games_df.away_team_abbr.unique():stats[t]=[]
+    
+    for i, r in games_df.iterrows():
+        
+        #get distributions
+        h = np.array(stats[r.home_team_abbr])
+        a = np.array(stats[r.away_team_abbr])
+        
+        #calc stat  and append to dict
+        hmean.append(h.mean())
+        amean.append(a.mean())
+
+        hstdev.append(h.std())
+        astdev.append(a.std())
+
+        hskew.append(skew(h))
+        askew.append(skew(a))
+        
+        #update stats
+        stats[r.home_team_abbr].append(r['home_'+stat])
+        stats[r.away_team_abbr].append(r['away_'+stat])
+    diff = np.array(hmean) - np.array(amean)
+    
+    names = ['home_'+stat+'_mean', 'away_'+stat+'_mean',
+            'home_'+stat+'_stdev', 'away_'+stat+'_stdev',
+            'home_'+stat+'_skew', 'away_'+stat+'_skew',
+            stat+'_diff']
+    lists = [hmean,amean,hstdev,astdev,hskew,askew,diff]
+    for i in range(len(names)):
+        result_q.put((names[i],lists[i]))
+
+def calc_stat_worker(q,batting,df,result_q):
+    #worker for threaded calc_stat
+    while not q.empty():
+        stat = q.get()
+        calc_stat(stat,batting,df,result_q)
+        print(stat,'Done!')
+        q.task_done()
+
+
+#######################
+##   get/clean data  ##
+#######################
+
 
 def get_pitchers():
     pitchers = pd.read_csv('../data/pitchers.csv')
@@ -13,7 +99,6 @@ def get_pitchers():
     
     pitchers['is_starting_pitcher'] = False
     pitchers['is_starting_pitcher'][pitchers.inherited_runners.isna()]=True
-    
     return pitchers
 
 
@@ -55,7 +140,9 @@ def start_times(x):
     '''
     cleanup routine for start times
     '''
+    x = str(x)
     if re.findall('(\d+\:\d+)', x) == []:
         return np.nan
     else:
         return re.findall('(\d+\:\d+)', x)[0]
+
