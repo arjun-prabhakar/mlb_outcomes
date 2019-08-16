@@ -139,8 +139,6 @@ def get_games():
 
     games['is_grass']=False
     games['is_grass'][games['field_type'].isin(['on grass'])]=True
-    #fix for error in data collection
-    games = games[games['field_type'].isin(['on grass','on turf'])].copy().reset_index(drop=True)
     games.drop(columns='field_type',inplace=True)
 
     games['spread'] = games.home_team_runs.astype('int') - games.away_team_runs
