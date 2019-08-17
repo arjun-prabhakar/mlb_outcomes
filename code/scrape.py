@@ -1,12 +1,52 @@
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup as bs
+import threading
 
-def process_link(link, lock):
+def get_today_games():
+    '''
+    pulls down today's games from https://www.baseball-reference.com/previews/
+    returns dataframe
+    '''
+    games=[]
+    url = 'https://www.baseball-reference.com/previews/'
+    page = requests.get(url).text
+    soup = bs(page,'lxml')
+    summaries = soup.findAll('div', {'class':'game_summary'})
+    for s in summaries:
+        game = {}
+        cells = s.findAll('table')[0].findAll('td')
+        try:
+            team_links = s.findAll('a')
+            game['away_team_abbr'] = team_links[0]['href'].split('/')[2]
+            game['home_team_abbr'] = team_links[2]['href'].split('/')[2]
+        except Exception as e:
+            #just all star games trigger this, I think
+            print(team_links) 
+            continue
+
+        # get time
+        game['time'] = s.find('table',{'class':'teams'}).find('tbody').findAll('tr')[1].findAll('td')[2].text.strip()
+        # get pitchers
+        try:
+            cells = s.findAll('table')[1].findAll('td')
+            game['away_pitcher'] = cells[1].find('a')['href'].split('/')[-1][:-6].strip()
+            game['home_pitcher'] = cells[3].find('a')['href'].split('/')[-1][:-6].strip()
+        except Exception as e:
+            print("no pitcher", game)
+        games.append(game)
+    test_df = pd.DataFrame(games)
+    test_df['date']=pd.datetime.now().date()
+    return test_df
+
+def process_link(link, lock=None):
     '''
     takes link from get_game_links and processes the games
     into csv files
     '''
+    
+    if lock==None: lock = threading.Lock()
+        
     
     url = f'https://www.baseball-reference.com{link}'
     html = requests.get(url).text
