@@ -4,98 +4,131 @@ import numpy as np
 import re
 from scipy.stats import skew
 
-def calc_stat(stat, stat_df, games_df, result_q, key):
+def add_season_rolling(stat_df, df, cols, team, name):
     '''
-    calculates season-to-date mean, stdev, skew for given stat from reference dataframe. fills na with 0
+    add seasonal rolling statistical features to target dataframe
     
     params:
-    -------
-    - stat: column name in reference df from which to calc stat
-    - stat_df: dataframe with end of game stats (like batting or pitching csvs gemerated by scrape.py)
-    - games_df: dataframe with games of interest
-    - result_q: queue object in which to store results
-    - key: 'team' if building team level stats, otherwise will build pitcher stats
-    
-    returns:
-    --------
-    results_q gets a tuple
-    - 0: name of created feature, like "batting_avg_mean"
-    - 1: list of values corresponging to games ing games_df
-    add the results back to games_df like this:
-        key, result = result_q.get()
-        df[key]=result
+    ------
+    stat_df: the dataframe with the game stats (like from batting.csv
+    df: the target dataframe we're going to return with new columns
+    cols: list of columns in stat_df containing the stats of interest
+    team: binary whether this is a team stat (false if pitcher stat)
+    name: the string appended to each feature name (like 'batting')
     '''
-       
-    hmean,amean = [],[]
-    hstdev,astdev = [],[]
-    hskew,askew = [],[]
-    
-    df_len = len(games_df)
-    # merge in home team stat to df
-    b = stat_df[['game_id',stat]][stat_df['is_home_team']==True].groupby('game_id').first().reset_index()
-    games_df = pd.merge(left=games_df, right=b,on='game_id', how='left')
-    games_df['home_'+stat] = games_df[stat]
-    games_df.drop(columns=stat, inplace=True)
-    
-    #now moerge in away team stat
-    b = stat_df[['game_id',stat]][stat_df['is_home_team']==False].groupby('game_id').first().reset_index()
-    games_df = pd.merge(left=games_df, right=b, on='game_id', how='left')
-    games_df['away_'+stat] = games_df[stat]
-    games_df.drop(columns=stat, inplace=True)
-    
-    assert df_len == len(games_df)
-    
-    if key=='team':
-        #building team level stats
-        a_key = 'away_team_abbr'
-        h_key = 'home_team_abbr'
-    else:
-        #building pitcher stats
-        a_key = 'away_pitcher'
-        h_key = 'home_pitcher'
-    
-    stats = {}
-    for t in games_df[h_key].unique():stats[t]=[]
-    for t in games_df[a_key].unique():stats[t]=[]
-    
-    for i, r in games_df.iterrows():
-        
-        m, s, sk = get_stats_from_dist(stats[r[h_key]])
-        hmean.append(m)
-        hstdev.append(s)
-        hskew.append(sk)
-        
-        m, s, sk = get_stats_from_dist(stats[r[a_key]])
-        amean.append(m)
-        astdev.append(s)
-        askew.append(sk)
-                
-        #update stats
-        stats[r[h_key]].append(r['home_'+stat])
-        stats[r[a_key]].append(r['away_'+stat])
-    diff = np.array(hmean) - np.array(amean)
-    
-    names = ['home_'+stat+'_mean', 'away_'+stat+'_mean',
-            'home_'+stat+'_stdev', 'away_'+stat+'_stdev',
-            'home_'+stat+'_skew', 'away_'+stat+'_skew',
-            stat+'_diff']
-    lists = [hmean,amean,hstdev,astdev,hskew,askew,diff]
-    for i in range(len(names)):
-        result_q.put((names[i],lists[i]))
+    stat_df['season'] = stat_df.game_id.str[3:7]
+    for s in cols:
+        if team:
+            stat_df[s+'_mean'] = stat_df.groupby(['team', 'season'])[s].apply(lambda x:x.rolling(200, min_periods=1).mean())
+            stat_df[s+'_stdev'] = stat_df.groupby(['team', 'season'])[s].apply(lambda x:x.rolling(200, min_periods=1).std())
+            stat_df[s+'_skew'] = stat_df.groupby(['team', 'season'])[s].apply(lambda x:x.rolling(200, min_periods=1).skew())
 
+            #shift the stats to the next game, in order to convert to pre-game stats
+            stat_df[s+'_mean'] = stat_df.groupby(['team', 'season'])[s+'_mean'].shift()
+            stat_df[s+'_stdev'] = stat_df.groupby(['team', 'season'])[s+'_stdev'].shift()
+            stat_df[s+'_skew'] = stat_df.groupby(['team', 'season'])[s+'_skew'].shift()
+        else:
+            stat_df[s+'_mean'] = stat_df.groupby(['name', 'season'])[s].apply(lambda x:x.rolling(200, min_periods=1).mean())
+            stat_df[s+'_stdev'] = stat_df.groupby(['name', 'season'])[s].apply(lambda x:x.rolling(200, min_periods=1).std())
+            stat_df[s+'_skew'] = stat_df.groupby(['name', 'season'])[s].apply(lambda x:x.rolling(200, min_periods=1).skew())
         
+            #shift the stats to the next game, in order to convert to pre-game stats
+            stat_df[s+'_mean'] = stat_df.groupby(['name', 'season'])[s+'_mean'].shift()
+            stat_df[s+'_stdev'] = stat_df.groupby(['name', 'season'])[s+'_stdev'].shift()
+            stat_df[s+'_skew'] = stat_df.groupby(['name', 'season'])[s+'_skew'].shift()
+        
+    stat_cols = []
+    for s in cols:
+        stat_cols.append(s + '_mean')
+        stat_cols.append(s + '_stdev')
+        stat_cols.append(s + '_skew')
+    stat_cols.append('game_id')
+
+    df_len = len(df)
+    b = stat_df[stat_cols][stat_df['is_home_team']==True].groupby('game_id').first().reset_index()
+    df = pd.merge(left=df, right=b,on='game_id', how='left')
+
+    for s in stat_cols:
+        if s == 'game_id':continue
+        df['home_'+name+'_'+s] = df[s]
+        df.drop(columns=s, inplace=True)
+
+    b = stat_df[stat_cols][stat_df['is_home_team']==False].groupby('game_id').first().reset_index()
+    df = pd.merge(left=df, right=b,on='game_id', how='left')
+
+    for s in stat_cols:
+        if s == 'game_id':continue
+        df['away_'+name+'_'+s] = df[s]
+        df.drop(columns=s, inplace=True)
+
+    assert df_len == len(df)
+
+    # create diff stats
+    for s in cols:
+        if s == 'game_id':continue
+        df[name+'_'+s+'_diff']= df['home_'+name+'_'+s+'_mean']-df['away_'+name+'_'+s+'_mean']
+
+    return df
+
+def add_10RA_rolling(stat_df, df, cols, team, name):
+    '''
+    add 10 period rolling statistical features to target dataframe
+    
+    params:
+    ------
+    stat_df: the dataframe with the game stats (like from batting.csv
+    df: the target dataframe we're going to return with new columns
+    cols: list of columns in stat_df containing the stats of interest
+    team: binary whether this is a team stat (false if pitcher stat)
+    name: the string appended to each feature name (like 'batting')
+    '''
+    #create stat
+    for s in cols:
+        if team:
+            stat_df[s+'_10RA'] = stat_df.groupby('team')[s].apply(lambda x:x.rolling(10, min_periods=1).mean())
+            #shift the stats to the next game, in order to convert to pre-game stats
+            stat_df[s+'_10RA'] = stat_df.groupby('team')[s+'_10RA'].shift()
+        else:
+            stat_df[s+'_10RA'] = stat_df.groupby('name')[s].apply(lambda x:x.rolling(10, min_periods=1).mean())
+            #shift the stats to the next game, in order to convert to pre-game stats
+            stat_df[s+'_10RA'] = stat_df.groupby('name')[s+'_10RA'].shift()
+        
+    # add stat to target dataframe
+    stat_cols = [x + '_10RA' for x in cols]
+    stat_cols.append('game_id')
+    
+    #home team first
+    df_len = len(df)
+    b = stat_df[stat_cols][stat_df['is_home_team']==True].groupby('game_id').first().reset_index()
+    df = pd.merge(left=df, right=b,on='game_id', how='left')
+
+    for s in stat_cols:
+        if s == 'game_id':continue
+        df['home_'+name+'_'+s] = df[s]
+        df.drop(columns=s, inplace=True)
+    
+    #now away team
+    b = stat_df[stat_cols][stat_df['is_home_team']==False].groupby('game_id').first().reset_index()
+    df = pd.merge(left=df, right=b,on='game_id', how='left')
+
+    for s in stat_cols:
+        if s == 'game_id':continue
+        df['away_'+name+'_'+s] = df[s]
+        df.drop(columns=s, inplace=True)
+    
+    assert df_len == len(df)
+    
+    # create diff stats
+    for s in stat_cols:
+        if s == 'game_id':continue
+        df[name+'_'+s+'_diff']= df['home_'+name+'_'+s]-df['away_'+name+'_'+s]
+    
+    return df  
+
+       
 def get_stats_from_dist(dist):
     d = np.array(dist).astype('float')
     return d.mean(),d.std(),skew(d)
-    
-def calc_stat_worker(q,batting,df,result_q, key='pitcher'):
-    #worker for threaded calc_stat
-    while not q.empty():
-        stat = q.get()
-        calc_stat(stat,batting,df,result_q, key)
-        print(stat,'Done!')
-        q.task_done()
-
 
 #######################
 ##   get/clean data  ##
