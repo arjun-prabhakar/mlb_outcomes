@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 
-def fix_na(df):
+def fix_na(df, add_ind = True):
     '''
     my imputer. adds indicator column & replaces missing with median
     also fixes np.inf with 0
@@ -11,7 +11,8 @@ def fix_na(df):
     # fix na
     missing_idx = df.isna().sum()[df.isna().sum()>0].index
     for x in missing_idx:
-        df[x + '_isna'] = df[x].isna() #add idicator column
+        if add_ind:
+            df[x + '_isna'] = df[x].isna() #add idicator column
         
         if df[x].dtype=='object':
             df[x].fillna('Unknown', inplace=True)
@@ -19,27 +20,6 @@ def fix_na(df):
             df[x].fillna(df[x].median(), inplace=True)
     df.replace({np.inf: 0}, inplace=True)
     return df
-
-def find_correlation(data, threshold=0.9):
-    '''
-    returns a list of correlated columns
-    https://gist.github.com/Swarchal/e29a3a1113403710b6850590641f046c
-    '''
-#     
-    corr_mat = data.corr()
-    corr_mat.loc[:, :] = np.tril(corr_mat, k=-1)
-    already_in = set()
-    result = []
-    for col in corr_mat:
-        perfect_corr = corr_mat[col][corr_mat[col] >= threshold].index.tolist()
-        if perfect_corr and col not in already_in:
-            already_in.update(set(perfect_corr))
-            perfect_corr.append(col)
-            result.append(perfect_corr)
-    select_nested = [f[1:] for f in result]
-    select_flat = [i for j in select_nested for i in j]
-    return select_flat
-
 
 def plot_confusion_matrix(y_true, y_pred, classes,
                           ax=None,
