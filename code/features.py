@@ -24,7 +24,10 @@ def game_stats(games,df):
     names = ['home_team_errors_mean','home_team_errors_stdev','home_team_errors_skew',
             'away_team_errors_mean','away_team_errors_stdev','away_team_errors_skew',
             'home_team_spread_mean','home_team_spread_stdev','home_team_spread_skew',
-            'away_team_spread_mean','away_team_spread_stdev','away_team_spread_skew']
+            'away_team_spread_mean','away_team_spread_stdev','away_team_spread_skew',
+            'home_team_wins_mean','home_team_wins_stdev','home_team_wins_skew',
+            'away_team_wins_mean','away_team_wins_stdev','away_team_wins_skew'
+            ]
     lists = {} 
     for n in names: lists[n]=[]
     
@@ -36,6 +39,11 @@ def game_stats(games,df):
     spread = {}
     for t in df['home_team_season'].unique():spread[t]=[]
     for t in df['away_team_season'].unique():spread[t]=[]
+    
+    wins = {}
+    for t in df['home_team_season'].unique():wins[t]=[]
+    for t in df['away_team_season'].unique():wins[t]=[]
+    
         
     for i,r in df.iterrows():
         m, s, sk = get_stats_from_dist(errors[r.home_team_season])
@@ -54,6 +62,14 @@ def game_stats(games,df):
         lists['away_team_spread_mean'].append(m)
         lists['away_team_spread_stdev'].append(s)
         lists['away_team_spread_skew'].append(sk)
+        m, s, sk = get_stats_from_dist(wins[r.home_team_season])
+        lists['home_team_wins_mean'].append(m)
+        lists['home_team_wins_stdev'].append(s)
+        lists['home_team_wins_skew'].append(sk)
+        m, s, sk = get_stats_from_dist(wins[r.away_team_season])
+        lists['away_team_wins_mean'].append(m)
+        lists['away_team_wins_stdev'].append(s)
+        lists['away_team_wins_skew'].append(sk)
         
         #update dict with latest game
         try:
@@ -61,18 +77,22 @@ def game_stats(games,df):
             errors[r['away_team_season']].append(games['away_team_errors'].iloc[i])
             spread[r['home_team_season']].append(games['home_team_spread'].iloc[i])
             spread[r['away_team_season']].append(games['away_team_spread'].iloc[i])
+            wins[r['home_team_season']].append(games['home_team_runs'].iloc[i]>games['away_team_runs'].iloc[i])
+            wins[r['away_team_season']].append(games['home_team_runs'].iloc[i]<games['away_team_runs'].iloc[i])
         except IndexError:
             continue
 
     # get differences
     error_diff = np.array(lists['home_team_errors_mean'])-np.array(lists['away_team_errors_mean'])
     spread_diff = np.array(lists['home_team_spread_mean'])-np.array(lists['away_team_spread_mean'])
+    wins_diff = np.array(lists['home_team_wins_mean'])-np.array(lists['away_team_wins_mean'])
     
     # add created rows into df
     for n in names:
         df[n]=lists[n]
     df['error_diff']=error_diff
     df['spread_diff']=spread_diff
+    df['wins_diff']=wins_diff
     
     df = df.sort_values(by='date').reset_index(drop=True)
     return df
