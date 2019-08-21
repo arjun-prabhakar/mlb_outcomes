@@ -352,6 +352,10 @@ def get_stats_from_dist(dist):
 
 def get_pitchers():
     pitchers = pd.read_csv('../data/pitchers.csv')
+    pitchers.drop_duplicates()
+    pitchers.to_csv('../data/pitchers.csv', index=False)
+    
+    
     pitchers['is_home_team']=True
     pitchers['is_home_team'][pitchers['home_away']=='away']=False
     pitchers.drop(columns='home_away', inplace=True)
@@ -363,6 +367,9 @@ def get_pitchers():
 
 def get_pitching():
     pitching = pd.read_csv('../data/pitching.csv')
+    pitching.drop_duplicates()
+    pitching.to_csv('../data/pitching.csv', index=False)
+    
     pitching['is_home_team']=True
     pitching['is_home_team'][pitching['home_away']=='away']=False
     pitching.drop(columns='home_away', inplace=True)
@@ -371,6 +378,9 @@ def get_pitching():
 
 def get_batting():
     batting = pd.read_csv('../data/batting.csv')
+    batting.drop_duplicates()
+    batting.to_csv('../data/batting.csv', index=False)
+    
     batting['is_home_team']=True
     batting['is_home_team'][batting['home_away']=='away']=False
     batting.drop(columns='home_away', inplace=True)
@@ -379,6 +389,9 @@ def get_batting():
 
 def get_games():
     games = pd.read_csv('../data/game_summaries.csv')
+    games.drop_duplicates()
+    games.to_csv('../data/game_summaries.csv', index=False)
+    
     games['date'] = pd.to_datetime(games.date).dt.date
     games['start_time'] = games['start_time'].apply(lambda x: start_times(x))
     games['is_night_game']=True
