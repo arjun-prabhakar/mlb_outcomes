@@ -1,15 +1,18 @@
-#MLB Outcomes#
+# MLB Outcomes #
+
 **A Baseball Machine Learning Experiment**
 This project predicts the outcomes of MLB baseball games with approx 67% accuracy. This is ~10% better than the casino oddsmakers.
 
-##How it Works##
+## How it Works ##
+
 The project is broken up into these parts:
 1. **web scraper**: this builds a database of baseball stats sourced from [baseball-reference.com](https://www.baseball-reference.com/boxes/).
 2. **features**: cleans data and calculates additional statistics for each game.
 3. **model**: finds the best parameters for our machine learning algorithm (xgboost)
 4. **predict**: generates predictions for today's games
 
-##How this Repo is Organized##
+## How this Repo is Organized ##
+
 We have these folders:
 - **notebooks**: this project uses Jupyter notebooks to run all of the code. These notebooks are kept here.
 - **code**: these are python files imported in the notebooks.
